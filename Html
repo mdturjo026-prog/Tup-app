@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>FACE TOPUP</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial; background: #f5f5f5; color: #1c1c1e; padding: 10px; padding-bottom: 80px; }
+  .header { background: white; padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .header h2 { color: #6366f1; margin-bottom: 10px; }
+  .rate-box { background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 8px 0; }
+  .rate { font-size: 16px; color: #1c1c1e; font-weight: bold; }
+  .limit { font-size: 13px; color: #ff9500; }
+  .tab-bar { display: flex; background: white; border-radius: 12px; padding: 5px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .tab { flex: 1; padding: 12px; text-align: center; border-radius: 8px; font-weight: bold; cursor: pointer; }
+  .tab.active { background: #6366f1; color: white; }
+  .section-title { font-size: 18px; font-weight: bold; margin: 20px 0 10px; color: #1c1c1e; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 20px 10px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; transition: transform 0.2s; color: white; }
+  .card:active { transform: scale(0.95); }
+  .card-icon { font-size: 45px; margin-bottom: 8px; }
+  .card-name { font-size: 13px; font-weight: bold; text-transform: uppercase; }
+  .card-price { font-size: 18px; font-weight: bold; margin-top: 5px; background: rgba(255,255,255,0.2); padding: 4px; border-radius: 6px; }
+  .sell-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .sell-section h3 { margin-bottom: 15px; color: #ff3b30; }
+  .input-group { margin-bottom: 15px; text-align: left; }
+  .input-group label { font-size: 14px; color: #8e8e93; display: block; margin-bottom: 5px; }
+  .input-group input { width: 100%; padding: 12px; border: 2px solid #e5e5ea; border-radius: 8px; font-size: 16px; }
+  .btn { padding: 15px; font-size: 16px; color: white; border: none; border-radius: 12px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
+  .submit-btn { background: #34c759; }
+  .admin-btn { background: #8e8e93; display: none; position: fixed; bottom: 20px; right: 20px; width: auto; padding: 15px 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>💎 FACE TOPUP</h2>
+        <div class="rate-box">
+            <div class="rate">🟢 BUY: <span id="buyRate">120</span>৳ = $1 USD</div>
+            <div class="limit">Limit: $<span id="minBuy">1</span> - $<span id="maxBuy">100</span></div>
+        </div>
+        <div class="rate-box" style="background: #ffebee;">
+            <div class="rate">🔴 SELL: $1 = <span id="sellRate">110</span>৳</div>
+            <div class="limit">Limit: $<span id="minSell">1</span> - $<span id="maxSell">100</span></div>
+        </div>
+    </div>
+
+    <div class="tab-bar">
+        <div class="tab active" id="buyTab" onclick="switchTab('buy')">💰 BUY / TOPUP</div>
+        <div class="tab" id="sellTab" onclick="switchTab('sell')">💸 SELL USD</div>
+    </div>
+
+    <div id="buySection">
+        <div id="productsContainer"></div>
+    </div>
+
+    <div id="sellSection" style="display:none;">
+        <div class="sell-section">
+            <h3>💸 Sell Your USD</h3>
+            <div class="input-group">
+                <label>USD Amount ($<span id="sellMinLabel">1</span> - $<span id="sellMaxLabel">100</span>)</label>
+                <input type="number" id="sellAmount" placeholder="Enter USD amount" step="0.01">
+            </div>
+            <div class="input-group">
+                <label>You Will Get</label>
+                <input type="text" id="sellTaka" readonly style="background:#f5f5f5;font-weight:bold;color:#34c759;" placeholder="0 ৳">
+            </div>
+            <div class="input-group">
+                <label>PayPal/USDT Transaction ID</label>
+                <input type="text" id="sellTxid" placeholder="Enter TXID">
+            </div>
+            <div class="input-group">
+                <label>bKash/Nagad Number</label>
+                <input type="text" id="sellNumber" placeholder="01XXXXXXXXX">
+            </div>
+            <button class="btn submit-btn" onclick="submitSell()">Submit Sell Request</button>
+            <p style="font-size:12px;color:#8e8e93;margin-top:15px;">Send USD to: <br><b id="paypalInfo"></b><br>or USDT: <b id="usdtInfo"></b></p>
+        </div>
+    </div>
+
+    <button class="btn admin-btn" id="adminBtn">🔐 Admin</button>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        const ADMIN_ID = 123456789; // এখানে_তোমার_ID_বসাও
+        let SETTINGS = {}, PRODUCTS = [];
+
+        function switchTab(tab) {
+            document.getElementById('buyTab').classList.remove('active');
+            document.getElementById('sellTab').classList.remove('active');
+            document.getElementById('buySection').style.display = 'none';
+            document.getElementById('sellSection').style.display = 'none';
+
+            if (tab === 'buy') {
+                document.getElementById('buyTab').classList.add('active');
+                document.getElementById('buySection').style.display = 'block';
+            } else {
+                document.getElementById('sellTab').classList.add('active');
+                document.getElementById('sellSection').style.display = 'block';
+            }
+        }
+
+        function renderProducts() {
+            const container = document.getElementById('productsContainer');
+            container.innerHTML = '';
+            const categories = [...new Set(PRODUCTS.map(p => p[1]))];
+
+            categories.forEach(cat => {
+                container.innerHTML += `<div class="section-title">${cat}</div><div class="grid" id="grid-${cat.replace(/\s/g,'')}"></div>`;
+                const grid = document.getElementById(`grid-${cat.replace(/\s/g,'')}`);
+                PRODUCTS.filter(p => p[1] === cat).forEach(p => {
+                    const [id, category, name, usd, taka, icon] = p;
+                    const priceText = taka > 0? `${taka} TAKA` : 'TAP TO BUY';
+                    grid.innerHTML += `
+                        <div class="card" onclick="buyProduct(${id}, '${name}', ${usd}, ${taka})">
+                            <div class="card-icon">${icon}</div>
+                            <div class="card-name">${name}</div>
+                            <div class="card-price">${priceText}</div>
+                        </div>`;
+                });
+            });
+        }
+
+        function updateRates() {
+            document.getElementById('buyRate').innerText = SETTINGS.buy_rate;
+            document.getElementById('sellRate').innerText = SETTINGS.sell_rate;
+            document.getElementById('minBuy').innerText = SETTINGS.min_buy;
+            document.getElementById('maxBuy').innerText = SETTINGS.max_buy;
+            document.getElementById('minSell').innerText = SETTINGS.min_sell;
+            document.getElementById('maxSell').innerText = SETTINGS.max_sell;
+            document.getElementById('sellMinLabel').innerText = SETTINGS.min_sell;
+            document.getElementById('sellMaxLabel').innerText = SETTINGS.max_sell;
+            document.getElementById('paypalInfo').innerText = SETTINGS.paypal_email;
+            document.getElementById('usdtInfo').innerText = SETTINGS.usdt_address;
+        }
+
+        tg.onEvent('message_received', (event) => {
+            try {
+                let data = JSON.parse(event.text);
+                if (data.settings) {
+                    SETTINGS = data.settings;
+                    PRODUCTS = data.products;
+                    updateRates();
+                    renderProducts();
+                }
+            } catch(e) {}
+        });
+
+        tg.sendData(JSON.stringify({action: 'get_data'}));
+
+        if (tg.initDataUnsafe.user && tg.initDataUnsafe.user.id === ADMIN_ID) {
+            document.getElementById('adminBtn').style.display = 'block';
+        }
+
+        document.getElementById('sellAmount').addEventListener('input', (e) => {
+            let usd = parseFloat(e.target.value) || 0;
+            let taka = usd * parseFloat(SETTINGS.sell_rate || 110);
+            document.getElementById('sellTaka').value = taka.toFixed(0) + ' ৳';
+        });
+
+        window.buyProduct = function(id, name, usd, taka) {
+            if (taka === 0) {
+                tg.showPrompt(`Enter USD amount for ${name}\nMin: $${SETTINGS.min_buy}, Max: $${SETTINGS.max_buy}`, (amount) => {
+                    if (!amount) return;
+                    let usd_amt = parseFloat(amount);
+                    if (usd_amt < parseFloat(SETTINGS.min_buy) || usd_amt > parseFloat(SETTINGS.max_buy)) {
+                        return tg.showAlert(`Amount must be $${SETTINGS.min_buy} - $${SETTINGS.max_buy}`);
+                    }
+                    let taka_amt = usd_amt * parseFloat(SETTINGS.buy_rate);
+                    proceedBuy(id, name, usd_amt, taka_amt);
+                });
+            } else {
+                proceedBuy(id, name, usd, taka);
+            }
+        }
+
+        function proceedBuy(id, name, usd, taka) {
+            tg.showPopup({
+                title: `Buy ${name}`,
+                message: `Pay: ${taka}৳ bKash to:\n${SETTINGS.bkash_number}\n\nGet: $${usd}\n\nAfter payment, enter TrxID:`,
+                buttons: [{id: 'ok', type: 'default', text: 'Submit TrxID'}, {type: 'cancel'}]
+            }, (btnId) => {
+                if (btnId === 'ok') {
+                    tg.showPrompt(`Enter TrxID & Game ID\nFormat: TrxID|GameID\nExample: 9A2B5C8D|12345678`, (text) => {
+                        if (text) {
+                            let [trxid, idcode] = text.split('|');
+                            tg.sendData(JSON.stringify({action: 'buy_product', product_id: id, trxid: trxid, number: idcode || ''}));
+                            tg.close();
+                        }
+                    });
+                }
+            });
+        }
+
+        window.submitSell = function() {
+            let usd = parseFloat(document.getElementById('sellAmount').value);
+            let txid = document.getElementById('sellTxid').value.trim();
+            let number = document.getElementById('sellNumber').value.trim();
+
+            if (!usd || usd < parseFloat(SETTINGS.min_sell) || usd > parseFloat(SETTINGS.max_sell)) {
+                return tg.showAlert(`Amount must be $${SETTINGS.min_sell} - $${SETTINGS.max_sell}`);
+            }
+            if (!txid ||!number) return tg.showAlert('Please fill all fields');
+
+            tg.showConfirm(`Confirm Sell:\nSend: $${usd} USD\nGet: ${usd * parseFloat(SETTINGS.sell_rate)}৳ bKash\nTo: ${number}\nTXID: ${txid}`, (ok) => {
+                if (ok) {
+                    tg.sendData(JSON.stringify({action: 'sell_usd', usd_amount: usd, txid: txid, number: number}));
+                    tg.close();
+                }
+            });
+        }
+
+        document.getElementById('adminBtn').addEventListener('click', () => {
+            tg.sendData(JSON.stringify({action: 'admin_panel'}));
+            tg.close();
+        });
+    </script>
+</body>
+</html>
